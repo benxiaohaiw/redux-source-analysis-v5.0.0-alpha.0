@@ -93,6 +93,13 @@ export default function createStore<
       )
     }
 
+    // benxiaohaiw/redux-toolkit-source-analysis-v1.9.0/packages/toolkit/src/configureStore.ts
+    // 参数顺序 -> root reducer, undefined, compose函数执行后返回的最终调用开关函数
+
+    // 执行compose函数执行后返回的最终调用开关函数，实际上得到的是在执行compose函数所传入的函数数组参数的第一个元素函数执行所返回的结果 - 那么实际上就是src/applyMiddleware.ts中applyMiddleware函数返回的这个函数之又返回的一个函数（接收reducer和preloadedState的）
+    // 然后传入createStore函数作为参数 - 实际上逻辑最终走到了src/applyMiddleware.ts中applyMiddleware函数返回的这个函数了
+    // 那么这个函数是又返回了一个函数用来接收reducer和preloadedState的 - 所以逻辑又走到了这个函数中啦 ~
+    // 因为这里执行了这个函数 // +++
     return enhancer(createStore)(
       reducer,
       preloadedState as PreloadedState<S>
@@ -107,10 +114,18 @@ export default function createStore<
     )
   }
 
+  // 记录root reducer
   let currentReducer = reducer
+  // 记录预加载状态 undefined
   let currentState = preloadedState as S
+
+  // 当前的
   let currentListeners: (() => void)[] | null = []
-  let nextListeners = currentListeners
+
+  // 下一个
+  let nextListeners = currentListeners // 默认为当前的
+
+  // 是否正在派发中... // +++
   let isDispatching = false
 
   /**
@@ -120,9 +135,9 @@ export default function createStore<
    * This prevents any bugs around consumers calling
    * subscribe/unsubscribe in the middle of a dispatch.
    */
-  function ensureCanMutateNextListeners() {
+  function ensureCanMutateNextListeners() { // 确保可以变异下一个监听器
     if (nextListeners === currentListeners) {
-      nextListeners = currentListeners.slice()
+      nextListeners = currentListeners.slice() // 浅拷贝一下 // +++
     }
   }
 
@@ -131,7 +146,7 @@ export default function createStore<
    *
    * @returns The current state tree of your application.
    */
-  function getState(): S {
+  function getState(): S { // 返回当前的状态 // +++
     if (isDispatching) {
       throw new Error(
         'You may not call store.getState() while the reducer is executing. ' +
@@ -140,7 +155,7 @@ export default function createStore<
       )
     }
 
-    return currentState as S
+    return currentState as S // +++
   }
 
   /**
@@ -166,7 +181,7 @@ export default function createStore<
    * @param listener A callback to be invoked on every dispatch.
    * @returns A function to remove this change listener.
    */
-  function subscribe(listener: () => void) {
+  function subscribe(listener: () => void) { // 订阅
     if (typeof listener !== 'function') {
       throw new Error(
         `Expected the listener to be a function. Instead, received: '${kindOf(
@@ -184,16 +199,24 @@ export default function createStore<
       )
     }
 
+    // 默认是已订阅 // +++
     let isSubscribed = true
 
-    ensureCanMutateNextListeners()
+    // 确保可以变异下一个监听器
+    ensureCanMutateNextListeners() // 就是进行浅拷贝一下重新赋值 // +++
+
+    // 在新的里面推入进去 // +++
     nextListeners.push(listener)
 
+    // 返回取消订阅函数 // +++
     return function unsubscribe() {
+
+      // 不是已订阅则直接返回
       if (!isSubscribed) {
         return
       }
 
+      // 是正在派发中
       if (isDispatching) {
         throw new Error(
           'You may not unsubscribe from a store listener while the reducer is executing. ' +
@@ -201,11 +224,17 @@ export default function createStore<
         )
       }
 
+      // 改为不是已订阅
       isSubscribed = false
 
+      // 再一次确保可以变异
       ensureCanMutateNextListeners()
+
+      // 查找
       const index = nextListeners.indexOf(listener)
+      // 删除
       nextListeners.splice(index, 1)
+      // 给当前置为null
       currentListeners = null
     }
   }
@@ -235,7 +264,7 @@ export default function createStore<
    * Note that, if you use a custom middleware, it may wrap `dispatch()` to
    * return something else (for example, a Promise you can await).
    */
-  function dispatch(action: A) {
+  function dispatch(action: A) { // 派发 // +++
     if (!isPlainObject(action)) {
       throw new Error(
         `Actions must be plain objects. Instead, the actual type was: '${kindOf(
@@ -255,18 +284,27 @@ export default function createStore<
     }
 
     try {
+      // 标记是正在派发中 // +++
       isDispatching = true
-      currentState = currentReducer(currentState, action)
+
+      // 执行root reducer // 传入状态和action对象 // +++
+      currentState = currentReducer(currentState, action) // undefined, { type: ActionTypes.INIT }
     } finally {
+      // 标记变为false // +++
       isDispatching = false
     }
 
+    // 把新的赋值为当前的
     const listeners = (currentListeners = nextListeners)
+
+    // 遍历
     for (let i = 0; i < listeners.length; i++) {
       const listener = listeners[i]
+      // 一一进行执行
       listener()
     }
 
+    // 返回这个action对象 // +++
     return action
   }
 
@@ -282,7 +320,7 @@ export default function createStore<
    */
   function replaceReducer<NewState, NewActions extends A>(
     nextReducer: Reducer<NewState, NewActions>
-  ): Store<ExtendState<NewState, StateExt>, NewActions, StateExt, Ext> & Ext {
+  ): Store<ExtendState<NewState, StateExt>, NewActions, StateExt, Ext> & Ext { // 替换root reducer
     if (typeof nextReducer !== 'function') {
       throw new Error(
         `Expected the nextReducer to be a function. Instead, received: '${kindOf(
@@ -292,15 +330,15 @@ export default function createStore<
     }
 
     // TODO: do this more elegantly
-    ;(currentReducer as unknown as Reducer<NewState, NewActions>) = nextReducer
+    ;(currentReducer as unknown as Reducer<NewState, NewActions>) = nextReducer // 直接把current reducer赋值替换即可
 
     // This action has a similar effect to ActionTypes.INIT.
     // Any reducers that existed in both the new and old rootReducer
     // will receive the previous state. This effectively populates
     // the new state tree with any relevant data from the old one.
-    dispatch({ type: ActionTypes.REPLACE } as A)
+    dispatch({ type: ActionTypes.REPLACE } as A) // 做一次派发replace // +++
     // change the type of the store by casting it to the new store
-    return store as unknown as Store<
+    return store as unknown as Store< // 返回这个store实例 // +++
       ExtendState<NewState, StateExt>,
       NewActions,
       StateExt,
@@ -315,8 +353,10 @@ export default function createStore<
    * For more information, see the observable proposal:
    * https://github.com/tc39/proposal-observable
    */
-  function observable() {
+  function observable() { // 可观察的 // +++
     const outerSubscribe = subscribe
+
+    // 返回对象 // +++
     return {
       /**
        * The minimal observable subscription method.
@@ -356,14 +396,19 @@ export default function createStore<
   // When a store is created, an "INIT" action is dispatched so that every
   // reducer returns their initial state. This effectively populates
   // the initial state tree.
-  dispatch({ type: ActionTypes.INIT } as A)
+  dispatch({ type: ActionTypes.INIT } as A) // 派发init
+  // 这里执行了一次dispatch函数 // 那么就会对root reducer函数进行执行，所返回的值重新赋值给currentState变量啦 ~
+  // 那么这个root reducer其实就是src/combineReducers.ts下的combination函数 // +++
 
+  // 准备store实例对象 // +++
   const store = {
-    dispatch: dispatch as Dispatch<A>,
-    subscribe,
-    getState,
-    replaceReducer,
-    [$$observable]: observable
+    dispatch: dispatch as Dispatch<A>, // dispatch函数
+    subscribe, // 订阅函数
+    getState, // 获取状态函数
+    replaceReducer, // 替换root reducer // +++
+    [$$observable]: observable // 可观察函数
   } as unknown as Store<ExtendState<S, StateExt>, A, StateExt, Ext> & Ext
+
+  // 返回这个store实例对象 // +++
   return store
 }

@@ -60,11 +60,17 @@ function getUnexpectedStateShapeWarningMessage(
   }
 }
 
+// 断言reducer的形状 - 其实就是一一执行每个reducer函数对其返回的值进行判断是undefined则报错 // +++
 function assertReducerShape(reducers: ReducersMapObject) {
   Object.keys(reducers).forEach(key => {
     const reducer = reducers[key]
-    const initialState = reducer(undefined, { type: ActionTypes.INIT })
 
+    // 执行reducer函数 // +++
+    // benxiaohaiw/redux-toolkit-source-analysis-v1.9.0/packages/toolkit/src/createReducer.ts下的reducer函数所返回的应该是一个空数组进行的带有初始值的reduce函数的执行
+    // 那么将直接返回这个初始值state到这里 // 然后下面将直接对该值进行类型上的判断 // +++
+    const initialState = reducer(undefined, { type: ActionTypes.INIT }) // +++
+
+    // 对返回的值进行判断
     if (typeof initialState === 'undefined') {
       throw new Error(
         `The slice reducer for key "${key}" returned undefined during initialization. ` +
@@ -123,9 +129,15 @@ export default function combineReducers<M extends ReducersMapObject>(
   ActionFromReducersMapObject<M>
 >
 export default function combineReducers(reducers: ReducersMapObject) {
+  // 取出对象所有的key
   const reducerKeys = Object.keys(reducers)
+  
+  // 最终
   const finalReducers: ReducersMapObject = {}
+
+  // 遍历
   for (let i = 0; i < reducerKeys.length; i++) {
+    // 取出key
     const key = reducerKeys[i]
 
     if (process.env.NODE_ENV !== 'production') {
@@ -134,10 +146,14 @@ export default function combineReducers(reducers: ReducersMapObject) {
       }
     }
 
+    // 值是为函数的
     if (typeof reducers[key] === 'function') {
+      // 存入最终对象中 // +++
       finalReducers[key] = reducers[key]
     }
   }
+
+  // 取出最终的所有key
   const finalReducerKeys = Object.keys(finalReducers)
 
   // This is used to make sure we don't warn about the same
@@ -149,15 +165,19 @@ export default function combineReducers(reducers: ReducersMapObject) {
 
   let shapeAssertionError: unknown
   try {
-    assertReducerShape(finalReducers)
+    assertReducerShape(finalReducers) // 断言reducer的形状 - 其实就是一一执行每个reducer函数对其返回的值进行判断是undefined则报错 // +++
   } catch (e) {
+    // 捕获错误 - 赋值
     shapeAssertionError = e
   }
 
+  // 返回一个函数作为root reducer
   return function combination(
-    state: StateFromReducersMapObject<typeof reducers> = {},
-    action: AnyAction
+    state: StateFromReducersMapObject<typeof reducers> = {}, // undefined -> {}
+    action: AnyAction // src/createStore.ts下的{type: ActionTypes.INIT}
   ) {
+
+    // 有错误直接抛出去 // +++
     if (shapeAssertionError) {
       throw shapeAssertionError
     }
@@ -174,13 +194,25 @@ export default function combineReducers(reducers: ReducersMapObject) {
       }
     }
 
-    let hasChanged = false
-    const nextState: StateFromReducersMapObject<typeof reducers> = {}
+    let hasChanged = false // 是否有变化 - 默认么有
+
+    // 准备新的状态对象 // +++
+    const nextState: StateFromReducersMapObject<typeof reducers> = {} // 新的状态
+
+    // 遍历 // +++
     for (let i = 0; i < finalReducerKeys.length; i++) {
       const key = finalReducerKeys[i]
+
+      // 取出reducer函数
       const reducer = finalReducers[key]
-      const previousStateForKey = state[key]
-      const nextStateForKey = reducer(previousStateForKey, action)
+
+      // 在{}中取counter对应的状态 -> undefined // +++
+      const previousStateForKey = state[key] // 对key的之前的状态 // +++
+
+      // 对key的新的状态 // +++
+      const nextStateForKey = reducer(previousStateForKey, action) // 传入对key的之前的状态, action对象
+
+      // 
       if (typeof nextStateForKey === 'undefined') {
         const actionType = action && action.type
         throw new Error(
@@ -191,11 +223,26 @@ export default function combineReducers(reducers: ReducersMapObject) {
             `If you want this reducer to hold no value, you can return null instead of undefined.`
         )
       }
+
+      // 存入
       nextState[key] = nextStateForKey
+
+      // 对比新旧状态值来进行标记是否有变化
       hasChanged = hasChanged || nextStateForKey !== previousStateForKey
     }
+
+    // 还需要进行直接性的对比finalReducerKeys的长度与传入的state参数的所有key的长度是否相等
     hasChanged =
       hasChanged || finalReducerKeys.length !== Object.keys(state).length
+    
+    // 有变化则返回新状态 // +++
+    // 没有变化则还是旧状态
     return hasChanged ? nextState : state
+
+    /* 
+    // +++
+    // 当前的combine函数的执行是在src/createStore.ts下的dispatch函数中进行执行的
+    // 那么这里所返回的值将直接作为dispatch函数所在的作用域中的currentState变量的值 // +++
+    */
   }
 }

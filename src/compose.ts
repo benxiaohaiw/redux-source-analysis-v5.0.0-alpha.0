@@ -43,19 +43,46 @@ export default function compose<R>(
 
 export default function compose<R>(...funcs: Function[]): (...args: any[]) => R
 
-export default function compose(...funcs: Function[]) {
+export default function compose(...funcs: Function[]) { // 组合函数
+
+  // 空数组则返回一个函数arg => arg
   if (funcs.length === 0) {
     // infer the argument type so it is usable in inference down the line
     return <T>(arg: T) => arg
   }
 
+  // 只有有一个函数 - 则返回这个函数
   if (funcs.length === 1) {
     return funcs[0]
   }
 
+  // 对数组进行reduce - 没有初始值参数
   return funcs.reduce(
-    (a, b) =>
-      (...args: any) =>
+    (a, b) => // 返回一个函数则作为下一次的参数a
+      (...args: any) => // 该函数返回执行结果
         a(b(...args))
   )
+
+  /* 
+  fn1, fn2, fn3
+
+  a -> fn1
+  b -> fn2
+  
+  返回一个函数A作为下一次的参数a
+  ---
+
+  // 闭包的存在
+  a -> (..args) => fn1(fn2(...args)) <- 函数A
+  b -> fn3
+
+  返回一个函数B作为compose函数的结果
+  结果 -> (..args) => 函数A(fn3(...args)) <- 函数B
+
+  // 执行这个结果也就是函数B - 传参数
+  // 那么参数传给fn3且先执行，它的结果作为函数A的参数，之后传给fn2且执行后的结果传给了fn1且执行后的结果作为函数A的结果然后作为函数B的结果返回
+  
+  // +++
+  所以拿compose函数参数是一个函数的数组来讲 - 最终调用开关交给了外部 - 且参数数组中的函数是倒序一一执行的，且后一个函数执行后的结果作为前一个函数执行时的参数 // +++
+  */
 }

@@ -198,6 +198,8 @@ export default function combineReducers(reducers: ReducersMapObject) {
 
     // 准备新的状态对象 // +++
     const nextState: StateFromReducersMapObject<typeof reducers> = {} // 新的状态
+    // 注意每次执行这个combination函数也就是在最终dispatch函数中执行调用root reducer时就是这里的combination函数的执行
+    // 需要注意这个新的状态每次都是一个【新的对象引用】 // +++
 
     // 遍历 // +++
     for (let i = 0; i < finalReducerKeys.length; i++) {
@@ -237,7 +239,55 @@ export default function combineReducers(reducers: ReducersMapObject) {
     
     // 有变化则返回新状态 // +++
     // 没有变化则还是旧状态
-    return hasChanged ? nextState : state
+    return hasChanged ? nextState : state // 这里是关键如果有变化了则返回上面内的那个新的对象，没有变化的话则返回旧状态 // +++
+    // benxiaohaiw/redux-toolkit-source-analysis-v1.9.0/packages/toolkit/src/createReducer.ts中的reducer函数
+    // 一定注意其内部使用了immer下的produce函数保证如果有变化则返回的一定是一个【新的引用值】
+
+    // 可以想到react中dispatchSetState函数中使用Object.is算法所带来的问题
+    // 比如对一个对象属性进行修改之后再返回这个对象，你会发现react并没有进行更新
+    // 原因就是is算法在判断新旧引用时是一样的，那么代表没有变化则不会进行更新
+
+    // 解决方式就是使用下面的方法 // +++
+
+    /* 
+    https://immerjs.github.io/immer/#a-quick-example-for-comparison
+
+    const baseState = [
+      {
+        title: "Learn TypeScript",
+        done: true
+      },
+      {
+        title: "Try Immer",
+        done: false
+      }
+    ]
+
+    Without Immer
+
+    const nextState = baseState.slice() // shallow clone the array
+    nextState[1] = {
+      // replace element 1...
+      ...nextState[1], // with a shallow clone of element 1
+      done: true // ...combined with the desired update
+    }
+    // since nextState was freshly cloned, using push is safe here,
+    // but doing the same thing at any arbitrary time in the future would
+    // violate the immutability principles and introduce a bug!
+    nextState.push({title: "Tweet about it"})
+
+    With Immer
+
+    import produce from "immer"
+
+    const nextState = produce(baseState, draft => { // draft是一个Proxy实例
+      draft[1].done = true
+      draft.push({title: "Tweet about it"})
+    })
+
+    */
+
+    // ------
 
     /* 
     // +++

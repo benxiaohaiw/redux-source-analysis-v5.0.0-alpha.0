@@ -63,8 +63,8 @@ export default function applyMiddleware(
 
   // 返回一个函数
   return (createStore: StoreEnhancerStoreCreator) => // 再次返回一个函数
-    // 
-    <S, A extends AnyAction>(
+    // 这是一个函数 // +++
+    <S, A extends AnyAction>( // 箭头函数
       reducer: Reducer<S, A>,
       preloadedState?: PreloadedState<S>
     ) => {
